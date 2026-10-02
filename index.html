@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vocational VR Screwdriver Workshop — Client Portal & Simulator</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Three.js and Loaders -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
+</head>
+<body>
+  <div class="portal-container">
+    <!-- Top Navigation Header -->
+    <header class="portal-header">
+      <div class="header-left">
+        <div class="brand-badge">VR VOCATIONAL XR</div>
+        <div class="header-titles">
+          <h1>PRECISION SCREWDRIVER WORKSHOP</h1>
+          <p class="subtitle">Interactive WebGL Client Simulator &amp; Oculus Quest Delivery Portal</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="chip chip-live"><span class="pulse-dot"></span> LIVE WEBGL SIMULATOR</div>
+        <a href="ScrewdriverWorkshop.apk" download="ScrewdriverWorkshop.apk" class="btn btn-primary" id="btn-download-apk">
+          <svg class="btn-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
+          </svg>
+          Download Quest APK (17.5 MB)
+        </a>
+        <a href="https://github.com/AasavR/vocational-screwdriver-workshop" target="_blank" rel="noopener" class="btn btn-outline" id="btn-github">
+          <svg class="btn-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          GitHub Repo
+        </a>
+      </div>
+    </header>
+
+    <!-- Main Viewport Section -->
+    <main class="simulator-wrapper">
+      <div id="webgl-container"></div>
+
+      <!-- Floating Vocational HUD -->
+      <div class="hud-overlay">
+        <!-- Top Status Banner -->
+        <div class="hud-top-bar">
+          <div class="hud-guidance" id="hud-guidance">
+            <span class="guidance-icon">⚡</span>
+            <span id="guidance-text">[NAVIGATION] Move with [WASD] or [Arrow Keys] over a screw head</span>
+          </div>
+          <div class="hud-mode-pill" id="hud-mode-pill">
+            <span class="mode-label">TOOL MODE:</span>
+            <span class="mode-value" id="mode-value">UNSCREW (CCW)</span>
+          </div>
+        </div>
+
+        <!-- Fastener Counter Matrix -->
+        <div class="hud-fasteners-panel">
+          <div class="panel-header">
+            <span>FASTENER STATUS</span>
+            <span class="counter-badge" id="fastener-counter">4 / 4 REMAINING</span>
+          </div>
+          <div class="fastener-grid">
+            <div class="fastener-card" id="screw-card-0">
+              <div class="fastener-title">FASTENER 1</div>
+              <div class="fastener-loc">FL (-0.38, -0.18)</div>
+              <div class="fastener-state state-threaded">THREADED</div>
+            </div>
+            <div class="fastener-card" id="screw-card-1">
+              <div class="fastener-title">FASTENER 2</div>
+              <div class="fastener-loc">FR (+0.38, -0.18)</div>
+              <div class="fastener-state state-threaded">THREADED</div>
+            </div>
+            <div class="fastener-card" id="screw-card-2">
+              <div class="fastener-title">FASTENER 3</div>
+              <div class="fastener-loc">RL (-0.38, +0.28)</div>
+              <div class="fastener-state state-threaded">THREADED</div>
+            </div>
+            <div class="fastener-card" id="screw-card-3">
+              <div class="fastener-title">FASTENER 4</div>
+              <div class="fastener-loc">RR (+0.38, +0.28)</div>
+              <div class="fastener-state state-threaded">THREADED</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Telemetry Box -->
+        <div class="hud-telemetry-panel">
+          <div class="panel-header">TOOL TELEMETRY</div>
+          <div class="telemetry-rows">
+            <div class="telemetry-row">
+              <span class="tel-label">POSITION (X, Y, Z):</span>
+              <span class="tel-val" id="tel-pos">0.00, 1.15, 0.00</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="tel-label">ENGAGEMENT:</span>
+              <span class="tel-val status-disengaged" id="tel-engage">DISENGAGED (HOVER)</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="tel-label">UNTHREAD PROGRESS:</span>
+              <div class="progress-wrap">
+                <div class="progress-bar" id="tel-progress-bar" style="width: 0%;"></div>
+                <span class="progress-text" id="tel-progress-text">0%</span>
+              </div>
+            </div>
+            <div class="telemetry-row">
+              <span class="tel-label">ESTIMATED TORQUE:</span>
+              <span class="tel-val" id="tel-torque">0.0 N·m</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- On-Screen Virtual Controls Bar -->
+        <div class="hud-controls-bar">
+          <div class="controls-group navigation-group">
+            <span class="ctrl-group-title">TOOL HORIZONTAL TRANSLATION</span>
+            <div class="dpad-layout">
+              <button class="dpad-btn dpad-up" id="btn-up" title="Move Forward (W / Up)">▲</button>
+              <div class="dpad-mid">
+                <button class="dpad-btn dpad-left" id="btn-left" title="Move Left (A / Left)">◀</button>
+                <button class="dpad-btn dpad-center" id="btn-center" title="Snap to Nearest Fastener">◎</button>
+                <button class="dpad-btn dpad-right" id="btn-right" title="Move Right (D / Right)">▶</button>
+              </div>
+              <button class="dpad-btn dpad-down" id="btn-down" title="Move Backward (S / Down)">▼</button>
+            </div>
+          </div>
+
+          <div class="controls-group action-group">
+            <span class="ctrl-group-title">FASTENER ACTIONS</span>
+            <div class="actions-layout">
+              <button class="action-btn btn-engage" id="btn-engage">
+                <span class="btn-kbd">E</span>
+                <span class="btn-text">LOWER &amp; ENGAGE</span>
+              </button>
+              <button class="action-btn btn-unscrew" id="btn-unscrew">
+                <span class="btn-kbd">SPACE (HOLD)</span>
+                <span class="btn-text">UNSCREW / DRIVE</span>
+              </button>
+              <button class="action-btn btn-raise" id="btn-raise">
+                <span class="btn-kbd">Q</span>
+                <span class="btn-text">RAISE / DISENGAGE</span>
+              </button>
+              <button class="action-btn btn-mode" id="btn-toggle-mode">
+                <span class="btn-kbd">R</span>
+                <span class="btn-text">TOGGLE MODE</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="controls-group view-group">
+            <span class="ctrl-group-title">CAMERA PRESETS</span>
+            <div class="views-layout">
+              <button class="view-btn" id="view-persp">PERSPECTIVE</button>
+              <button class="view-btn" id="view-top">TOP-DOWN</button>
+              <button class="view-btn" id="view-focus">TOOL FOCUS</button>
+              <button class="view-btn btn-reset" id="btn-reset-workshop">RESET WORKSHOP</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Project Specifications & VR Controller Documentation -->
+    <section class="docs-section">
+      <div class="docs-grid">
+        <!-- Card 1: VR Experience & Mechanics -->
+        <div class="docs-card">
+          <div class="card-icon">🥽</div>
+          <h3>Meta Quest Standalone XR Experience</h3>
+          <p>
+            Developed in <strong>Unity 6 (6000.6.0f1)</strong> targeting Meta Quest 2, Quest 3, and Quest Pro headsets.
+            The module delivers a calibrated vocational training scenario teaching precision screwdriver mechanics, fastener alignment, thread release, and mechanical assembly procedures.
+          </p>
+          <ul class="specs-list">
+            <li><strong>Kinematic Isolation:</strong> Screwdriver movement is strictly isolated to the tool tip, preventing accidental translation of the workbench or workpiece.</li>
+            <li><strong>Target Proximity Snapping:</strong> Automatic magnetic engagement when within <strong>0.12m</strong> tolerance radius of countersunk screw heads.</li>
+            <li><strong>Synchronized Unthreading:</strong> Real-time rotational velocity (360°/s) coupled with proportional upward lift (0.025m travel) along the screw thread pitch.</li>
+            <li><strong>Tactile Feedback:</strong> Haptic pulse train on Oculus Touch controllers synchronized with ratcheting audio clicks.</li>
+          </ul>
+        </div>
+
+        <!-- Card 2: Oculus VR Controller Mappings -->
+        <div class="docs-card">
+          <div class="card-icon">🎮</div>
+          <h3>Oculus Quest Controller Mapping</h3>
+          <div class="mappings-table">
+            <div class="map-row">
+              <span class="map-input">Primary Thumbstick</span>
+              <span class="map-action">Planar Screwdriver Translation (X/Z Plane)</span>
+            </div>
+            <div class="map-row">
+              <span class="map-input">Index Trigger (Pull)</span>
+              <span class="map-action">Lower Screwdriver &amp; Lock into Fastener Socket (E)</span>
+            </div>
+            <div class="map-row">
+              <span class="map-input">A Button (Hold)</span>
+              <span class="map-action">Spin &amp; Unscrew Fastener (Continuous Drive)</span>
+            </div>
+            <div class="map-row">
+              <span class="map-input">Grip Button (Press)</span>
+              <span class="map-action">Raise Screwdriver to Hover Height &amp; Disengage (Q)</span>
+            </div>
+            <div class="map-row">
+              <span class="map-input">B Button (Press)</span>
+              <span class="map-action">Toggle Mode (Unscrew / Loosen vs Tighten / Fasten)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Quick Deployment & APK Download -->
+        <div class="docs-card">
+          <div class="card-icon">📦</div>
+          <h3>Deliverables &amp; Installation</h3>
+          <p>
+            The standalone Android APK has been compiled for direct sideloading onto Meta Quest devices:
+          </p>
+          <div class="apk-download-box">
+            <div class="apk-info">
+              <span class="apk-name">ScrewdriverWorkshop.apk</span>
+              <span class="apk-size">17.5 MB • Android 12+ (API 32) • OpenXR</span>
+            </div>
+            <a href="ScrewdriverWorkshop.apk" download="ScrewdriverWorkshop.apk" class="btn btn-accent">
+              Download Standalone APK
+            </a>
+          </div>
+          <div class="code-snippet">
+            <div class="snippet-header">Sideload via ADB (Android Debug Bridge):</div>
+            <code>adb install -r ScrewdriverWorkshop.apk</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="portal-footer">
+      <div>Vocational VR Screwdriver Workshop • Client Presentation &amp; Technical Interfacing Portal</div>
+      <div class="footer-links">
+        <a href="https://github.com/AasavR/vocational-screwdriver-workshop" target="_blank" rel="noopener">GitHub Project</a>
+        <span>•</span>
+        <a href="ScrewdriverWorkshop.apk" download>Quest APK</a>
+        <span>•</span>
+        <span>Built with Unity 6 &amp; Three.js WebGL</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
