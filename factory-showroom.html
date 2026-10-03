@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>500-Tool Factory Workshop Showroom — Vocational XR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <link rel="stylesheet" href="nav.css">
+  <style>
+    :root {
+      --bg: #070a0f;
+      --panel: rgba(10, 16, 24, 0.94);
+      --cyan: #00e5ff;
+      --amber: #ffab00;
+      --green: #00e676;
+      --text: #f0f6fc;
+      --muted: #90a4ae;
+      --font: 'Chakra Petch', sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      overflow: hidden;
+    }
+    #canvas-wrap {
+      position: fixed;
+      inset: 0;
+      top: 50px;
+    }
+    canvas { display: block; width: 100%!important; height: 100%!important; }
+
+    /* Top Filter & Bay Jump Bar */
+    #showroom-bar {
+      position: fixed;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      z-index: 200;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+      flex-wrap: wrap;
+    }
+    .bay-nav-btns {
+      display: flex;
+      gap: 6px;
+    }
+    .bay-btn {
+      background: #141c26;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cfd8dc;
+      padding: 0.35rem 0.7rem;
+      border-radius: 4px;
+      font-family: var(--font);
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .bay-btn:hover, .bay-btn.active {
+      border-color: var(--cyan);
+      color: #fff;
+      background: rgba(0, 229, 255, 0.15);
+    }
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      padding: 0.25rem 0.6rem;
+      gap: 6px;
+    }
+    .search-input {
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      outline: none;
+      width: 140px;
+    }
+
+    /* Live HUD Stats */
+    #hud-stats {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      border-left: 4px solid var(--cyan);
+      border-radius: 6px;
+      padding: 0.65rem 1.2rem;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      z-index: 200;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .hud-title { font-family: var(--font); font-size: 0.85rem; font-weight: 700; color: #fff; }
+    .hud-desc { color: var(--muted); font-size: 0.7rem; }
+
+    /* Tool Inspection Modal */
+    #inspect-modal {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(12, 18, 26, 0.98);
+      backdrop-filter: blur(20px);
+      border: 1.5px solid var(--cyan);
+      border-radius: 12px;
+      padding: 1.5rem;
+      width: 420px;
+      max-width: 90vw;
+      z-index: 99999;
+      box-shadow: 0 10px 50px rgba(0, 0, 0, 0.85), 0 0 30px rgba(0, 229, 255, 0.35);
+    }
+    #inspect-modal.show { display: block; }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+      padding-bottom: 0.75rem;
+    }
+    .modal-title { font-size: 1.25rem; font-weight: 700; color: #fff; }
+    .modal-bay { font-family: var(--mono); font-size: 0.75rem; color: var(--cyan); }
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .modal-close:hover { color: #fff; }
+    .modal-row {
+      margin-bottom: 0.75rem;
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+    .modal-label {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 1px;
+    }
+    .modal-val { color: #fff; font-weight: 600; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div id="canvas-wrap"></div>
+
+  <!-- Top Bay Filter Bar -->
+  <div id="showroom-bar">
+    <div class="bay-nav-btns">
+      <button class="bay-btn active" data-bay="-1">ALL (500)</button>
+      <button class="bay-btn" data-bay="0">BAY A: HAND (100)</button>
+      <button class="bay-btn" data-bay="1">BAY B: POWER (100)</button>
+      <button class="bay-btn" data-bay="2">BAY C: PRECISION (100)</button>
+      <button class="bay-btn" data-bay="3">BAY D: CUTTING (100)</button>
+      <button class="bay-btn" data-bay="4">BAY E: ASSEMBLY (100)</button>
+    </div>
+    <div class="search-box">
+      <span>🔍</span>
+      <input type="text" id="search-input" class="search-input" placeholder="Search 500 tools...">
+    </div>
+  </div>
+
+  <!-- Bottom Left Telemetry HUD -->
+  <div id="hud-stats">
+    <div class="hud-title">🏭 FACTORY SHOWROOM · 500 CLASSIC TOOLS</div>
+    <div class="hud-desc">[Orbit / Drag] Look Around · [Wheel] Zoom · [Click Any Tool] Inspect Specs</div>
+    <div style="color:var(--cyan);font-weight:700;margin-top:2px;" id="stat-showing">Showing: 500 / 500 Tools Across 5 Industrial Bays</div>
+  </div>
+
+  <!-- Inspection Modal -->
+  <div id="inspect-modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="m-name">Tool Name</div>
+        <div class="modal-bay" id="m-bay">Bay Classification</div>
+      </div>
+      <button class="modal-close" id="m-close">&times;</button>
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">PRIMARY INDUSTRIAL USE CASE</div>
+      <div class="modal-val" id="m-use">Precision fastening &amp; assembly</div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">COMPLIANCE &amp; MANUFACTURING STANDARD</div>
+      <div class="modal-val" id="m-std">ASME B107 / ISO 6789</div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">WORKSHOP STATION</div>
+      <div class="modal-val" id="m-loc">Bay A · Shelf Rack 3</div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    'use strict';
+
+    // 500 Tools Catalog across 5 Bays
+    const BAYS = [
+      {
+        name: 'Bay A — Hand Tools',
+        color: 0x3d7fff,
+        tools: [
+          "Ball-Peen Hammer","Club Hammer","Cross-Peen Hammer","Sledgehammer","Claw Hammer",
+          "Rubber Mallet","Soft-Face Mallet","Bricklayer Hammer","Geology Pick","Rock Hammer",
+          "Combination Pliers","Needle-Nose Pliers","Lineman Pliers","Slip-Joint Pliers","Locking Pliers",
+          "Diagonal Cutters","Wire Strippers","Hose Clamp Pliers","Snap-Ring Pliers (Int)","Snap-Ring Pliers (Ext)",
+          "Open-End Wrench 8mm","Open-End Wrench 10mm","Open-End Wrench 12mm","Box Wrench 14mm","Combo Wrench 17mm",
+          "Adjustable Wrench 8\"","Pipe Wrench 14\"","Strap Wrench","Basin Wrench","Torque Wrench 1/4\"",
+          "Flat Chisel","Cold Chisel","Masonry Chisel","Wood Chisel 1\"","Brick Bolster",
+          "Mill Bastard File 10\"","Half-Round File","Round File","Needle File Set","Rasp",
+          "Flat-Head Screwdriver 3mm","Phillips PH2 Screwdriver","Torx T25 Screwdriver","Pozidriv PZ2","Insulated VDE Screwdriver",
+          "Robertson #2 Screwdriver","Cabinet Screwdriver","Stubby Screwdriver","Offset Screwdriver","Ratchet Screwdriver",
+          "Hex Key Set (Metric)","Hex Key Set (Imperial)","Ball-End Hex Key L 5mm","T-Handle Hex 6mm","Folding Hex Key",
+          "Pry Bar 18\"","Crowbar 24\"","Flat Bar","Gooseneck Bar","Wonder Bar",
+          "Hand Saw 22\"","Tenon Saw","Dovetail Saw","Coping Saw","Hacksaw (Hand)",
+          "Utility Knife","Box Cutter","Marking Knife","Craft Knife","Electrician Knife",
+          "Steel Rule 300mm","Try Square","Combination Square","Bevel Gauge","Marking Gauge",
+          "Spirit Level 600mm","Torpedo Level","Line Level","Post Level","Bull's Eye Level",
+          "Centre Punch","Automatic Centre Punch","Prick Punch","Pin Punch 4mm","Drift Punch",
+          "Staple Gun (Heavy Duty)","Rivet Gun (Manual)","Pop Rivet Tool","Brad Pusher","Awl",
+          "Wire Brush","Hand Brush","Scratch Brush","Acid Brush","Paint Brush 2\"",
+          "Pipe Cutter 1/2\"","Tube Bender","Flaring Tool","Swaging Tool","Pipe Reamer",
+          "Block Plane","Jack Plane","Spokeshave","Cabinet Scraper","Card Scraper"
+        ]
+      },
+      {
+        name: 'Bay B — Power Tools',
+        color: 0xff9100,
+        tools: [
+          "Cordless Drill 18V","Hammer Drill","SDS-Plus Rotary Hammer","SDS-Max Demolition Hammer","Core Drill Rig",
+          "Angle Grinder 4½\"","Angle Grinder 7\"","Die Grinder (Pneumatic)","Bench Grinder 6\"","Bench Grinder 8\"",
+          "Jigsaw (Orbital)","Reciprocating Saw","Circular Saw 7¼\"","Track Saw","Miter Saw 10\"",
+          "Sliding Miter Saw 12\"","Table Saw (Contractor)","Band Saw","Scroll Saw","Panel Saw",
+          "Random-Orbit Sander","Half-Sheet Finishing Sander","Detail Sander","Belt Sander 3×18\"","Disc Sander",
+          "Router (Fixed Base)","Router (Plunge Base)","Laminate Trimmer","CNC Router Table","Biscuit Joiner",
+          "Cordless Impact Driver 18V","Cordless Impact Wrench ½\"","Electric Ratchet","Air Impact Wrench ½\"","Air Impact Wrench ¾\"",
+          "Air Ratchet ¼\"","Pneumatic Screwdriver","Air Drill","Air Chisel","Air Needle Scaler",
+          "Heat Gun 2000W","Soldering Iron 60W","Soldering Station","Desoldering Gun","Hot Air Rework Station",
+          "Welding Machine (MIG 200A)","TIG Welder 200A","Stick Welder","Plasma Cutter","Oxy-Acetylene Torch Set",
+          "Cordless Brad Nailer","Framing Nailer","Finish Nailer","Roofing Nailer","Flooring Nailer",
+          "Electric Stapler","Cordless Caulking Gun","Cordless Glue Gun","Power Tacker","Concrete Vibrator",
+          "Electric Chainsaw 14\"","Pole Saw","Electric Hedge Trimmer","Alligator Saw","Log Splitter",
+          "Drill Press Bench","Milling Machine (Mini)","Metal Lathe (Mini)","Wood Lathe","Radial Arm Saw",
+          "Bench Polisher","Bench Buffer","Wire Wheel Grinder","Flap Disc Grinder","Cutoff Tool",
+          "Oscillating Multi-Tool","Oscillating Blade Set","Vibrating Sander","Planer (Electric)","Jointer 6\"",
+          "Air Compressor 6-Gal","Air Compressor 30-Gal","Vacuum Pump","Dust Collector","Shop Vac 16-Gal",
+          "Cordless Angle Grinder","Cordless Circular Saw","Cordless Reciprocating Saw","Cordless Jigsaw","Cordless Multi-Tool"
+        ]
+      },
+      {
+        name: 'Bay C — Measurement & Precision',
+        color: 0x00e676,
+        tools: [
+          "Digital Vernier Caliper 150mm","Dial Caliper","Analogue Vernier Caliper","Digital Caliper 300mm","Depth Caliper",
+          "Outside Micrometer 0-25mm","Outside Micrometer 25-50mm","Inside Micrometer","Depth Micrometer","Thread Pitch Micrometer",
+          "Digital Height Gauge","Vernier Height Gauge","Surface Plate 300×300","Granite Surface Plate","V-Block Pair",
+          "Dial Test Indicator","Digital Indicator","Dial Bore Gauge","Cylinder Bore Gauge","Air Gauge",
+          "Digital Protractor","Bevel Protractor","Sine Bar","Angle Plate","Compound Sine Plate",
+          "Feeler Gauge Set","Wire Gauge","Thickness Gauge","Taper Gauge","Gap Gauge",
+          "Thread Gauge (Imperial)","Thread Gauge (Metric)","Pitch Gauge (Pipe)","Thread Ring Gauge","Thread Plug Gauge",
+          "Radius Gauge Set","Fillet Gauge","Form Gauge","Profile Gauge","Contour Gauge",
+          "Laser Distance Meter","Ultrasonic Distance Meter","Tape Measure 5m","Steel Tape 30m","Measuring Wheel",
+          "Digital Multimeter (Clamp)","Insulation Resistance Tester","Continuity Tester","LCR Meter","Oscilloscope 2-Ch",
+          "Infrared Thermometer","Thermocouple Thermometer","Bimetallic Thermometer","Digital Pyrometer","RTD Thermometer",
+          "Sound Level Meter","Vibration Meter","Tachometer (Contact)","Tachometer (Optical)","Stroboscope",
+          "Force Gauge (Digital)","Torque Tester","Push-Pull Scale","Load Cell 100kg","Spring Balance",
+          "Hardness Tester (Brinell)","Hardness Tester (Rockwell)","Shore Durometer","Leeb Hardness Tester","Vickers Tester",
+          "Roughness Tester","Profilometer","Step Gauge","Pin Gauge Set","Ring Gauge",
+          "Magnetic Base for DI","Universal Flex Stand","Fine Adjustment Clamp","Precision Vice (Small)","Optical Flat",
+          "Laser Level (Cross-Line)","Rotary Laser Level","Plumb Bob","Chalk Line Reel","Water Level",
+          "Coordinate Measuring Arm","3D Scanner (Handheld)","Photogrammetry Scale Bars","Digital Angle Gauge","Reference Angle Block"
+        ]
+      },
+      {
+        name: 'Bay D — Cutting Tools',
+        color: 0xff1744,
+        tools: [
+          "Hand Hacksaw","Junior Hacksaw","Bow Saw","Crosscut Hand Saw","Rip Hand Saw",
+          "Pruning Saw","Compass Saw","Keyhole Saw","Tile Saw","Wallboard Saw",
+          "Aviation Snips (Left)","Aviation Snips (Right)","Straight Aviation Snips","Tin Snips","Sheet Metal Shear",
+          "Linoleum Knife","Floor Scraper","Glass Cutter","Tile Cutter","Stone Cutter",
+          "HSS Drill Bit 3mm","HSS Drill Bit 5mm","HSS Drill Bit 8mm","HSS Drill Bit 10mm","HSS Drill Bit 13mm",
+          "SDS Drill Bit 6mm","SDS Drill Bit 10mm","Masonry Drill Bit 12mm","Spade Bit 25mm","Hole Saw 35mm",
+          "Hole Saw 50mm","Step Drill Bit","Countersink Bit","Deburring Tool","Spot Weld Drill",
+          "Circular Saw Blade (Wood)","Circular Saw Blade (Metal)","Circular Saw Blade (Ceramic)","Diamond Blade 7\"","Abrasive Cutoff Disc",
+          "Jigsaw Blade (Wood)","Jigsaw Blade (Metal)","Reciprocating Blade (Demo)","Reciprocating Blade (Fine)","Band Saw Blade",
+          "End Mill 6mm","End Mill 10mm","Ball Nose End Mill 8mm","Face Mill 50mm","T-Slot Cutter",
+          "Turning Carbide Insert","Threading Insert","Parting Insert","Boring Bar","Carbide Drill (Solid)",
+          "Lathe Left-Hand Tool","Lathe Right-Hand Tool","Facing Tool","Knurling Tool","Form Tool",
+          "Pipe Cutter (Heavy Duty)","Soil Pipe Cutter","Copper Tube Cutter","Stainless Pipe Cutter","Plastic Pipe Cutter",
+          "Wire Rope Cutter","Cable Cutter 70mm²","Bolt Cutter 18\"","Bolt Cutter 36\"","Rebar Cutter",
+          "Box Joint Blade Set","Dado Set","Slotting Cutter","Router Bit (Straight)","Router Bit (Round-Over)",
+          "Milling Vice (Swivel)","Parallels Set","Toolpost Grinder","Grinding Wheel 46G","CBN Grinding Wheel",
+          "Oscillating Cutting Blade","Grout Removal Blade","Flexible Scraper Blade","Plunge Cut Blade","Multi-Material Blade",
+          "Angle Die Grinder Burr","Carbide Rotary Burr Cylinder","Carbide Burr Ball","Flap Wheel 60G","Wire Cup Brush"
+        ]
+      },
+      {
+        name: 'Bay E — Specialty & Assembly',
+        color: 0xaa00ff,
+        tools: [
+          "Click Torque Wrench ½\" 20-110Nm","Digital Torque Wrench ¾\"","Torque Multiplier 5:1","Torque Angle Gauge","Torque Screwdriver 0.1-1Nm",
+          "Preset Torque Screwdriver","Electronic Torque Tester","Beam Torque Wrench","Split-Beam Torque Wrench","Hydraulic Torque Wrench",
+          "Air Impact Wrench 1\"","Air Impact Ratchet","Cordless Torque Multiplier","Hydraulic Impact Wrench","Pulse Tool",
+          "Blind Rivet Gun (Pneumatic)","Bulb-Tite Rivet Tool","Multi-Grip Rivet Tool","Structural Rivet Gun","Tri-Fold Rivet Nut Tool",
+          "Rivnut (Threaded Insert) Tool","Nutsert Tool","Speed Rivet Tool","Electric Rivet Gun","CherryMax Puller",
+          "Bearing Puller 2-Jaw","Bearing Puller 3-Jaw","Harmonic Puller","Hydraulic Puller 10T","Slide Hammer Puller",
+          "Gear Puller","Flywheel Puller","Steering Wheel Puller","Brake Drum Puller","CV Joint Puller",
+          "Bearing Press (Bench)","Hydraulic Press 12T","Hydraulic Press 20T","Arbor Press 1T","Shop Press 50T",
+          "Snap Ring Pliers (Heavy Duty)","Circlip Applicator","Retaining Ring Installer","Seeger Ring Pliers","E-Clip Installer",
+          "Thread Repair Kit M8","Thread Repair Kit M10","Helicoil Insert Kit","Tap & Die Set (Imperial)","Tap & Die Set (Metric)",
+          "Hand Tap Set (M3-M12)","Spiral-Point Tap M8","HTCP Form Tap","Die Stock Handle","Rethreading Die",
+          "Seal Driver Kit","Bearing Driver Set","Bushing Driver","Oil Seal Driver","Valve Seal Driver",
+          "Solvent Welding Iron","Hot-Plate Welder","Spin Welder","Ultrasonic Welder Probe","Resistance Spot Welder",
+          "Crimping Tool (Ratchet)","Lug Crimper","Terminal Crimper (BNC)","Cable Ferrule Crimper","Hydraulic Crimper 300mm²",
+          "Wire Loom Cutter","Cable Tie Gun","Heat Shrink Gun","Lacing Needle","Wire Twisting Tool",
+          "Solder Pot 300°C","Wave Soldering Iron","Desoldering Braid","SMD Rework Hot Air","SMD Vacuum Pickup",
+          "Fuel Injector Tester","Compression Tester","Vacuum/Pressure Pump Tester","Cylinder Leak-Down Tester","Timing Light",
+          "Piston Ring Compressor","Valve Spring Compressor","Cam Belt Locking Kit","Oil Filter Wrench (Chain)","Oil Filter Pliers",
+          "Gear-Box Lift Transmission Jack","Engine Stand 1000lb","Engine Hoist 2T","Crankshaft Holding Tool","Flywheel Lock"
+        ]
+      }
+    ];
+
+    // Three.js Setup
+    const wrap = document.getElementById('canvas-wrap');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x070a0f);
+    scene.fog = new THREE.FogExp2(0x070a0f, 0.02);
+
+    const camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, 0.1, 200);
+    camera.position.set(0, 8, 22);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    wrap.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 2, 0);
+    controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    controls.minDistance = 3;
+    controls.maxDistance = 60;
+
+    // Lighting
+    scene.add(new THREE.AmbientLight(0x283240, 1.4));
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    sunLight.position.set(10, 25, 15);
+    sunLight.castShadow = true;
+    scene.add(sunLight);
+
+    // Factory Floor
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(120, 60),
+      new THREE.MeshStandardMaterial({ color: 0x141820, roughness: 0.6, metalness: 0.4 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const floorGrid = new THREE.GridHelper(100, 50, 0x00e5ff, 0x182433);
+    floorGrid.position.y = 0.01;
+    scene.add(floorGrid);
+
+    // Build the 5 Bays
+    const BAY_X = [-36, -18, 0, 18, 36];
+    const allToolMeshes = [];
+
+    BAYS.forEach((bay, bIdx) => {
+      const bx = BAY_X[bIdx];
+
+      // Overhead Pendant Light
+      const pLight = new THREE.PointLight(bay.color, 1.2, 25);
+      pLight.position.set(bx, 8, 0);
+      scene.add(pLight);
+
+      // Bay Floor Pedestal
+      const pedestal = new THREE.Mesh(
+        new THREE.BoxGeometry(14, 0.2, 10),
+        new THREE.MeshStandardMaterial({ color: 0x1a222d, metalness: 0.7, roughness: 0.3 })
+      );
+      pedestal.position.set(bx, 0.1, 0);
+      pedestal.receiveShadow = true;
+      scene.add(pedestal);
+
+      // Shelving Rack Posts
+      for (let s = -1; s <= 1; s += 2) {
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(0.15, 6, 0.15),
+          new THREE.MeshStandardMaterial({ color: 0x334455, metalness: 0.8, roughness: 0.2 })
+        );
+        post.position.set(bx + s * 6.8, 3, 0);
+        post.castShadow = true;
+        scene.add(post);
+      }
+
+      // 5 Shelves per Bay (20 tools per shelf = 100 tools)
+      for (let r = 0; r < 5; r++) {
+        const shelfY = 0.8 + r * 1.0;
+        const shelf = new THREE.Mesh(
+          new THREE.BoxGeometry(13.8, 0.08, 1.4),
+          new THREE.MeshStandardMaterial({ color: 0x222c38, metalness: 0.8, roughness: 0.3 })
+        );
+        shelf.position.set(bx, shelfY, 0);
+        shelf.castShadow = true;
+        shelf.receiveShadow = true;
+        scene.add(shelf);
+
+        // 20 tools on this shelf (arranged 10 x 2)
+        for (let t = 0; t < 20; t++) {
+          const toolIdx = r * 20 + t;
+          const toolName = bay.tools[toolIdx] || `Tool ${toolIdx + 1}`;
+
+          const rowZ = (t < 10) ? -0.35 : 0.35;
+          const colX = bx - 5.8 + (t % 10) * 1.3;
+
+          // Varied geometric shapes per tool
+          const shapeType = toolIdx % 5;
+          let geo;
+          if (shapeType === 0) geo = new THREE.CylinderGeometry(0.06, 0.06, 0.35, 12);
+          else if (shapeType === 1) geo = new THREE.BoxGeometry(0.16, 0.12, 0.3);
+          else if (shapeType === 2) geo = new THREE.SphereGeometry(0.12, 12, 12);
+          else if (shapeType === 3) geo = new THREE.CylinderGeometry(0.1, 0.04, 0.28, 8);
+          else geo = new THREE.BoxGeometry(0.08, 0.06, 0.4);
+
+          const mat = new THREE.MeshStandardMaterial({
+            color: bay.color,
+            metalness: 0.8,
+            roughness: 0.25
+          });
+
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(colX, shelfY + 0.18, rowZ);
+          mesh.castShadow = true;
+          mesh.userData = {
+            bayIndex: bIdx,
+            bayName: bay.name,
+            name: toolName,
+            standard: (bIdx === 0) ? 'ASME B107 / ISO 3746' : (bIdx === 1) ? 'OSHA 1910 / IEC 60745' : (bIdx === 2) ? 'ASME B89 / ISO 1' : (bIdx === 3) ? 'ISO 6462 / DIN 1809' : 'ISO 5393 / ASME B107.14',
+            useCase: (bIdx === 0) ? 'Manual fastener torquing & striking' : (bIdx === 1) ? 'Electric & pneumatic material removal' : (bIdx === 2) ? 'Precision dimensional inspection' : (bIdx === 3) ? 'High-speed metal cutting & parting' : 'Controlled fastener torque & riveting',
+            location: `${bay.name} · Shelf Tier ${r + 1}`
+          };
+
+          scene.add(mesh);
+          allToolMeshes.push(mesh);
+        }
+      }
+    });
+
+    // Raycaster for Inspecting Tools on Click
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    const modal = document.getElementById('inspect-modal');
+    const mName = document.getElementById('m-name');
+    const mBay = document.getElementById('m-bay');
+    const mUse = document.getElementById('m-use');
+    const mStd = document.getElementById('m-std');
+    const mLoc = document.getElementById('m-loc');
+    document.getElementById('m-close').addEventListener('click', () => modal.classList.remove('show'));
+
+    window.addEventListener('click', (e) => {
+      if (modal.contains(e.target) || document.getElementById('showroom-bar').contains(e.target)) return;
+
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(allToolMeshes);
+
+      if (hits.length > 0) {
+        const data = hits[0].object.userData;
+        mName.textContent = data.name;
+        mBay.textContent = data.bayName;
+        mUse.textContent = data.useCase;
+        mStd.textContent = data.standard;
+        mLoc.textContent = data.location;
+        modal.classList.add('show');
+      }
+    });
+
+    // Bay Filter Buttons
+    const bayBtns = document.querySelectorAll('.bay-btn');
+    const statShowing = document.getElementById('stat-showing');
+
+    bayBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        bayBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const bIdx = parseInt(btn.dataset.bay, 10);
+        if (bIdx === -1) {
+          allToolMeshes.forEach(m => m.visible = true);
+          camera.position.set(0, 8, 22);
+          controls.target.set(0, 2, 0);
+          statShowing.textContent = 'Showing: 500 / 500 Tools Across 5 Industrial Bays';
+        } else {
+          allToolMeshes.forEach(m => m.visible = (m.userData.bayIndex === bIdx));
+          const targetX = BAY_X[bIdx];
+          camera.position.set(targetX, 5, 8);
+          controls.target.set(targetX, 2.5, 0);
+          statShowing.textContent = `Showing: 100 Tools in ${BAYS[bIdx].name}`;
+        }
+      });
+    });
+
+    // Search Filtering
+    const searchInput = document.getElementById('search-input');
+    searchInput.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      let matchCount = 0;
+      allToolMeshes.forEach(m => {
+        const match = m.userData.name.toLowerCase().includes(q) || m.userData.bayName.toLowerCase().includes(q);
+        m.visible = match;
+        if (match) matchCount++;
+      });
+      statShowing.textContent = `Showing: ${matchCount} / 500 Tools (Filtered by "${q}")`;
+    });
+
+    // Animation Loop
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = wrap.clientWidth / wrap.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    });
+
+    animate();
+  })();
+  </script>
+  <script src="nav.js"></script>
+</body>
+</html>

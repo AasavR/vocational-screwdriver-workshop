@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Torque Wrench Lab — Vocational XR Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <link rel="stylesheet" href="nav.css">
+  <style>
+    :root {
+      --bg: #0a0e14;
+      --panel: rgba(14, 22, 32, 0.92);
+      --cyan: #00e5ff;
+      --amber: #ffab00;
+      --green: #00e676;
+      --red: #ff1744;
+      --text: #f0f6fc;
+      --muted: #90a4ae;
+      --font: 'Chakra Petch', sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      overflow: hidden;
+    }
+    #canvas-wrap {
+      position: fixed;
+      inset: 0;
+      top: 50px;
+    }
+    canvas { display: block; width: 100%!important; height: 100%!important; }
+
+    .hud { position: fixed; pointer-events: none; z-index: 200; }
+
+    #guide-bar {
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      border-left: 4px solid var(--cyan);
+      border-radius: 6px;
+      padding: 0.6rem 1.4rem;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+      white-space: nowrap;
+      pointer-events: auto;
+    }
+    #guide-bar.aligned { border-left-color: var(--amber); }
+    #guide-bar.locked { border-left-color: var(--green); box-shadow: 0 0 20px rgba(0, 230, 118, 0.4); }
+
+    /* Bolt panel */
+    #bolt-panel {
+      top: 60px;
+      left: 20px;
+      width: 240px;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      border-radius: 8px;
+      padding: 0.85rem;
+      pointer-events: auto;
+    }
+    .bp-title {
+      font-size: 0.72rem;
+      letter-spacing: 1.2px;
+      color: var(--cyan);
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+    }
+    .bolt-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .bolt-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 0.45rem 0.3rem;
+      text-align: center;
+      font-family: var(--mono);
+      transition: all 0.25s;
+    }
+    .bolt-card .bn { font-size: 0.7rem; font-weight: 700; color: #fff; }
+    .bolt-card .bs { font-size: 0.62rem; color: var(--muted); margin-top: 2px; }
+    .bolt-card.active { border-color: var(--amber); background: rgba(255, 171, 0, 0.12); }
+    .bolt-card.done { border-color: var(--green); background: rgba(0, 230, 118, 0.12); }
+    .bolt-card.done .bs { color: var(--green); }
+
+    /* Torque gauge panel */
+    #torque-panel {
+      top: 60px;
+      right: 20px;
+      width: 250px;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      border-radius: 8px;
+      padding: 0.9rem;
+      pointer-events: auto;
+    }
+    .tp-title {
+      font-size: 0.72rem;
+      letter-spacing: 1.2px;
+      color: var(--cyan);
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+    }
+    .gauge-wrap { position: relative; width: 170px; margin: 0 auto; }
+    svg.gauge-svg { display: block; width: 170px; height: 95px; }
+    .gauge-val {
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #fff;
+      margin-top: 2px;
+    }
+    .gauge-unit { font-size: 0.75rem; color: var(--muted); }
+    .gauge-target { font-size: 0.68rem; color: var(--amber); text-align: center; margin-top: 2px; font-family: var(--mono); }
+    .tel-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      margin-top: 0.5rem;
+    }
+    .tel-l { color: var(--muted); }
+    .tel-v { color: #fff; font-weight: 600; }
+    .prog-wrap {
+      width: 105px;
+      height: 12px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .prog-bar { height: 100%; background: linear-gradient(90deg, #00b0ff, #00e676); transition: width 0.1s; }
+    .prog-txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 700; color: #fff; }
+
+    /* Controls bar */
+    #ctrl-bar {
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(10, 16, 24, 0.95);
+      backdrop-filter: blur(14px);
+      border-top: 1px solid rgba(0, 229, 255, 0.2);
+      padding: 0.65rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: auto;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .cg-title { font-size: 0.64rem; letter-spacing: 1.2px; color: var(--cyan); font-weight: 700; margin-bottom: 2px; }
+    .dpad { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .dpad-mid { display: flex; gap: 2px; }
+    .dp {
+      width: 32px;
+      height: 30px;
+      background: #1a2533;
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: all 0.1s;
+    }
+    .dp:active { background: var(--cyan); color: #000; }
+    .acts { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .ab {
+      background: #1a2533;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 0.5rem 0.9rem;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.15rem;
+      font-family: var(--font);
+      transition: all 0.15s;
+    }
+    .ab:hover { border-color: var(--cyan); }
+    .ab .kbd { font-family: var(--mono); font-size: 0.62rem; background: rgba(255, 255, 255, 0.1); padding: 0.1rem 0.4rem; border-radius: 3px; color: var(--cyan); }
+    .ab .abt { font-size: 0.72rem; font-weight: 700; }
+    .ab-drive { background: linear-gradient(135deg, rgba(0, 229, 255, 0.2), rgba(0, 230, 118, 0.2)); border-color: var(--cyan); }
+    .ab-drive.active { background: linear-gradient(135deg, #00e5ff, #00e676); color: #000; box-shadow: 0 0 15px rgba(0, 229, 255, 0.6); }
+    .ab-drive.active .kbd { background: #000; color: #fff; }
+    .views { display: flex; gap: 0.4rem; }
+    .vb {
+      background: #151d26;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      padding: 0.45rem 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .vb:hover { color: #fff; border-color: var(--cyan); }
+
+    /* Completion overlay */
+    #complete-banner {
+      display: none;
+      position: fixed;
+      inset: 0;
+      top: 50px;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1.2rem;
+      text-align: center;
+    }
+    #complete-banner.show { display: flex; }
+    .cb-emoji { font-size: 4rem; }
+    .cb-title { font-size: 2.2rem; font-weight: 700; color: var(--green); letter-spacing: 1px; }
+    .cb-sub { font-size: 1rem; color: var(--muted); font-family: var(--mono); }
+    .cb-btn {
+      margin-top: 0.5rem;
+      background: var(--green);
+      color: #000;
+      font-family: var(--font);
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 0.75rem 1.8rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .cb-btn:hover { background: #69f0ae; box-shadow: 0 0 20px rgba(0, 230, 118, 0.6); }
+  </style>
+</head>
+<body>
+  <div id="canvas-wrap"></div>
+
+  <!-- HUD -->
+  <div class="hud" id="guide-bar">
+    <span>⚡</span>
+    <span id="guide-txt">[NAVIGATION] Move with [WASD] or [Arrow Keys] over a bolt head</span>
+  </div>
+
+  <div class="hud" id="bolt-panel">
+    <div class="bp-title">CYLINDER HEAD BOLTS</div>
+    <div class="bolt-grid" id="bolt-grid"></div>
+    <div class="tel-row" style="margin-top:0.75rem">
+      <span class="tel-l">REMAINING:</span>
+      <span class="tel-v" id="bolt-counter">6 / 6 BOLTS</span>
+    </div>
+  </div>
+
+  <div class="hud" id="torque-panel">
+    <div class="tp-title">TORQUE TELEMETRY</div>
+    <div class="gauge-wrap">
+      <svg class="gauge-svg" viewBox="0 0 170 95">
+        <path d="M 20 85 A 65 65 0 0 1 150 85" fill="none" stroke="#192533" stroke-width="14" stroke-linecap="round"/>
+        <path d="M 20 85 A 65 65 0 0 1 65 28" fill="none" stroke="rgba(0, 230, 118, 0.25)" stroke-width="14" stroke-linecap="round"/>
+        <path d="M 65 28 A 65 65 0 0 1 125 25" fill="none" stroke="rgba(255, 171, 0, 0.2)" stroke-width="14" stroke-linecap="round"/>
+        <path d="M 125 25 A 65 65 0 0 1 150 85" fill="none" stroke="rgba(255, 23, 68, 0.2)" stroke-width="14" stroke-linecap="round"/>
+        <text x="14" y="93" font-size="9" fill="#90a4ae" font-family="JetBrains Mono">0</text>
+        <text x="76" y="20" font-size="9" fill="#90a4ae" font-family="JetBrains Mono">75</text>
+        <text x="136" y="93" font-size="9" fill="#90a4ae" font-family="JetBrains Mono">150</text>
+        <line id="gauge-needle" x1="85" y1="85" x2="85" y2="30" stroke="#00e5ff" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="85" cy="85" r="6" fill="#00e5ff"/>
+      </svg>
+    </div>
+    <div class="gauge-val"><span id="torque-val">0.0</span> <span class="gauge-unit">N·m</span></div>
+    <div class="gauge-target">SPECIFICATION: 150 N·m TORQUE BREAK</div>
+    <div class="tel-row">
+      <span class="tel-l">UNTHREAD PROGRESS:</span>
+      <div class="prog-wrap">
+        <div class="prog-bar" id="prog-bar" style="width: 0%"></div>
+        <span class="prog-txt" id="prog-txt">0%</span>
+      </div>
+    </div>
+    <div class="tel-row">
+      <span class="tel-l">COORDINATES:</span>
+      <span class="tel-v" id="tel-pos">0.00, 0.00</span>
+    </div>
+    <div class="tel-row">
+      <span class="tel-l">TOOL MODE:</span>
+      <span class="tel-v" style="color:var(--cyan)" id="tel-mode">LOOSEN (CCW)</span>
+    </div>
+  </div>
+
+  <!-- Controls Bar -->
+  <div class="hud" id="ctrl-bar">
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div class="cg-title">WRENCH TRANSLATION</div>
+      <div class="dpad">
+        <button class="dp" id="d-up">▲</button>
+        <div class="dpad-mid">
+          <button class="dp" id="d-left">◀</button>
+          <button class="dp" id="d-snap" title="Snap to nearest bolt">◎</button>
+          <button class="dp" id="d-right">▶</button>
+        </div>
+        <button class="dp" id="d-down">▼</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div class="cg-title">MECHANICAL ACTIONS</div>
+      <div class="acts">
+        <button class="ab" id="btn-clamp"><span class="kbd">E</span><span class="abt">CLAMP JAW</span></button>
+        <button class="ab ab-drive" id="btn-drive"><span class="kbd">SPACE (HOLD)</span><span class="abt">APPLY TORQUE</span></button>
+        <button class="ab" id="btn-release"><span class="kbd">Q</span><span class="abt">RELEASE JAW</span></button>
+        <button class="ab" id="btn-mode"><span class="kbd">R</span><span class="abt">TOGGLE MODE</span></button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div class="cg-title">CAMERA VIEWS</div>
+      <div class="views">
+        <button class="vb" id="v-persp">PERSPECTIVE</button>
+        <button class="vb" id="v-top">TOP-DOWN</button>
+        <button class="vb" id="v-side">SIDE</button>
+        <button class="vb" id="v-reset" style="color:#ff8a80;border-color:rgba(255,23,68,0.35)">RESET</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Completion Banner -->
+  <div id="complete-banner">
+    <div class="cb-emoji">🔧</div>
+    <div class="cb-title">CYLINDER HEAD DISASSEMBLED!</div>
+    <div class="cb-sub">All 6 precision bolts loosened to specification (150 N·m)</div>
+    <button class="cb-btn" id="cb-replay">RESET &amp; REPLAY EXPERIENCE</button>
+    <a href="index.html" style="color:#00e5ff;font-size:0.85rem;font-family:var(--mono);text-decoration:none;margin-top:0.4rem">
+      ← Return to Screwdriver Workshop
+    </a>
+  </div>
+
+  <script>
+  (function() {
+    'use strict';
+
+    // Web Audio Synthesizer
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+    let lastClickTime = 0;
+
+    function initAudio() {
+      if (!audioCtx && AudioCtx) audioCtx = new AudioCtx();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playRatchet() {
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      if (now - lastClickTime < 0.04) return;
+      lastClickTime = now;
+
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(1100, now);
+      osc.frequency.exponentialRampToValueAtTime(180, now + 0.035);
+
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.035);
+    }
+
+    function playSuccess() {
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+        gain.gain.setValueAtTime(0.25, now + idx * 0.07);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.28);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + idx * 0.07);
+        osc.stop(now + idx * 0.07 + 0.28);
+      });
+    }
+
+    // Three.js Scene Setup
+    const wrap = document.getElementById('canvas-wrap');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0e14);
+    scene.fog = new THREE.FogExp2(0x0a0e14, 0.04);
+
+    const camera = new THREE.PerspectiveCamera(46, wrap.clientWidth / wrap.clientHeight, 0.1, 100);
+    camera.position.set(0, 5.2, 6.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    wrap.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 1.1, 0);
+    controls.maxPolarAngle = Math.PI / 2 - 0.05;
+    controls.minDistance = 2;
+    controls.maxDistance = 12;
+
+    // Lighting (neutral industrial)
+    scene.add(new THREE.AmbientLight(0x2a3642, 1.3));
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.6);
+    mainLight.position.set(5, 10, 4);
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.width = mainLight.shadow.mapSize.height = 2048;
+    scene.add(mainLight);
+
+    const rimLight = new THREE.DirectionalLight(0x00e5ff, 0.55);
+    rimLight.position.set(-5, 4, -4);
+    scene.add(rimLight);
+
+    // Workbench
+    const bench = new THREE.Mesh(
+      new THREE.BoxGeometry(8.5, 0.35, 5.5),
+      new THREE.MeshStandardMaterial({ color: 0x18202b, metalness: 0.65, roughness: 0.45 })
+    );
+    bench.position.y = 0.75;
+    bench.receiveShadow = true;
+    scene.add(bench);
+    scene.add(new THREE.GridHelper(7.5, 15, 0x00e5ff, 0x1f2e3d));
+
+    // Aluminium cylinder head bracket
+    const bracket = new THREE.Group();
+    bracket.position.set(0, 1.05, 0);
+
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(4.8, 0.16, 3.4),
+      new THREE.MeshStandardMaterial({ color: 0x6e7f91, metalness: 0.85, roughness: 0.25 })
+    );
+    plate.castShadow = true;
+    plate.receiveShadow = true;
+    bracket.add(plate);
+
+    // 6 Hex Bolts in 2 rows of 3
+    const BOLT_COORDS = [
+      { id: 0, x: -1.5, z: -0.85 },
+      { id: 1, x:  0.0, z: -0.85 },
+      { id: 2, x:  1.5, z: -0.85 },
+      { id: 3, x: -1.5, z:  0.85 },
+      { id: 4, x:  0.0, z:  0.85 },
+      { id: 5, x:  1.5, z:  0.85 }
+    ];
+
+    const bolts = [];
+    const BOLT_INIT_Y = 1.18;
+    const BOLT_MAX_LIFT = 0.55;
+
+    function buildBolt(cfg) {
+      const g = new THREE.Group();
+      g.position.set(cfg.x, BOLT_INIT_Y, cfg.z);
+
+      const head = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.22, 0.1, 6),
+        new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.25 })
+      );
+      head.castShadow = true;
+      g.add(head);
+
+      const socket = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.09, 0.09, 0.05, 6),
+        new THREE.MeshStandardMaterial({ color: 0x11161d, metalness: 0.9, roughness: 0.5 })
+      );
+      socket.position.y = 0.03;
+      g.add(socket);
+
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.095, 0.095, 0.38, 16),
+        new THREE.MeshStandardMaterial({ color: 0xc5a028, metalness: 0.85, roughness: 0.35 })
+      );
+      shaft.position.y = -0.2;
+      g.add(shaft);
+
+      for (let r = 0; r < 4; r++) {
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(0.1, 0.012, 8, 20),
+          new THREE.MeshStandardMaterial({ color: 0xe0bc42, metalness: 0.9, roughness: 0.2 })
+        );
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = -0.06 - r * 0.06;
+        g.add(ring);
+      }
+
+      const indMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, side: THREE.DoubleSide, transparent: true, opacity: 0 });
+      const ind = new THREE.Mesh(new THREE.RingGeometry(0.26, 0.3, 32), indMat);
+      ind.rotation.x = -Math.PI / 2;
+      ind.position.y = 0.06;
+      g.add(ind);
+
+      scene.add(g);
+      return { id: cfg.id, group: g, head, indMat, x: cfg.x, z: cfg.z, lift: 0, torque: 0, state: 'tight' };
+    }
+
+    BOLT_COORDS.forEach(cfg => bolts.push(buildBolt(cfg)));
+    scene.add(bracket);
+
+    // Build bolt cards in HUD
+    const boltGrid = document.getElementById('bolt-grid');
+    bolts.forEach(b => {
+      const card = document.createElement('div');
+      card.className = 'bolt-card';
+      card.id = `bc-${b.id}`;
+      card.innerHTML = `<div class="bn">BOLT ${b.id + 1}</div><div class="bs">150 Nm</div>`;
+      boltGrid.appendChild(card);
+    });
+
+    // Torque Wrench Tool
+    const wrenchGroup = new THREE.Group();
+    const HOVER_Y = 2.5;
+    const ENGAGED_Y = 1.65;
+    wrenchGroup.position.set(0, HOVER_Y, 0);
+
+    function buildWrench() {
+      const g = new THREE.Group();
+      const steelMat = new THREE.MeshStandardMaterial({ color: 0xdce3ea, metalness: 0.95, roughness: 0.15 });
+      const rubberMat = new THREE.MeshStandardMaterial({ color: 0x182028, metalness: 0.2, roughness: 0.8 });
+      const accentMat = new THREE.MeshStandardMaterial({ color: 0x00b0ff, metalness: 0.7, roughness: 0.25 });
+
+      // Handle
+      const h = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 1.2, 12), rubberMat);
+      h.position.y = 0.95;
+      h.castShadow = true;
+      g.add(h);
+
+      // Knurled rings
+      for (let i = 0; i < 3; i++) {
+        const r = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.07, 12), accentMat);
+        r.position.y = 0.65 + i * 0.2;
+        g.add(r);
+      }
+
+      // Micrometer torque adjustment collar
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.145, 0.2, 20), accentMat);
+      collar.position.y = 1.6;
+      g.add(collar);
+
+      // Chrome extension shaft
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.7, 16), steelMat);
+      shaft.position.y = 0.3;
+      shaft.castShadow = true;
+      g.add(shaft);
+
+      // Socket drive head
+      const head = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.16, 0.14, 0.18, 6),
+        new THREE.MeshStandardMaterial({ color: 0x455565, metalness: 0.9, roughness: 0.3 })
+      );
+      head.position.y = -0.05;
+      head.castShadow = true;
+      g.add(head);
+
+      // Laser guide
+      const laser = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.003, 0.003, 1.4, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffab00, transparent: true, opacity: 0.45 })
+      );
+      laser.position.y = -0.8;
+      g.add(laser);
+
+      return g;
+    }
+
+    wrenchGroup.add(buildWrench());
+    scene.add(wrenchGroup);
+
+    // State & Kinematics
+    const state = {
+      mode: 'LOOSEN',
+      isEngaged: false,
+      isDriving: false,
+      targetId: null,
+      speed: 3.4,
+      driveSpeed: 4.8,
+      torquePerSec: 32.0,
+      keys: { w: false, a: false, s: false, d: false, space: false }
+    };
+
+    // DOM Elements
+    const guideBar = document.getElementById('guide-bar');
+    const guideTxt = document.getElementById('guide-txt');
+    const torqueVal = document.getElementById('torque-val');
+    const progBar = document.getElementById('prog-bar');
+    const progTxt = document.getElementById('prog-txt');
+    const telPos = document.getElementById('tel-pos');
+    const telMode = document.getElementById('tel-mode');
+    const boltCounter = document.getElementById('bolt-counter');
+    const driveBtn = document.getElementById('btn-drive');
+
+    function setGuide(msg, type = 'normal') {
+      guideTxt.textContent = msg;
+      guideBar.className = 'hud';
+      if (type === 'aligned') guideBar.classList.add('aligned');
+      if (type === 'locked') guideBar.classList.add('locked');
+    }
+
+    function updateBoltCard(b) {
+      const card = document.getElementById(`bc-${b.id}`);
+      if (!card) return;
+      const bs = card.querySelector('.bs');
+      if (b.state === 'tight') { card.className = 'bolt-card'; bs.textContent = '150 Nm'; }
+      else if (b.state === 'engaged') { card.className = 'bolt-card active'; bs.textContent = 'CLAMPED'; }
+      else { card.className = 'bolt-card done'; bs.textContent = 'FREE ✓'; }
+    }
+
+    function updateProximity() {
+      if (state.isEngaged) return;
+      let nearest = null;
+      let minDist = 0.7;
+
+      bolts.forEach(b => {
+        if (b.state === 'done') { b.indMat.opacity = 0; return; }
+        const dx = wrenchGroup.position.x - b.x;
+        const dz = wrenchGroup.position.z - b.z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d < minDist) { nearest = b; minDist = d; }
+      });
+
+      bolts.forEach(b => {
+        if (b.state !== 'done') b.indMat.opacity = (nearest && nearest.id === b.id) ? 0.9 : 0;
+      });
+
+      if (nearest) {
+        state.targetId = nearest.id;
+        setGuide(`[ALIGNED] Above Bolt ${nearest.id + 1} — Press [E] to Clamp Wrench Jaw`, 'aligned');
+      } else {
+        state.targetId = null;
+        const rem = bolts.filter(b => b.state !== 'done').length;
+        setGuide(`[NAVIGATION] Move with [WASD] or [Arrow Keys] over a bolt head (${rem}/6 remaining)`);
+      }
+    }
+
+    function clampWrench() {
+      if (state.isEngaged) return;
+      if (state.targetId === null) {
+        setGuide('[WARNING] Align wrench above a bolt head before clamping!');
+        return;
+      }
+      const b = bolts[state.targetId];
+      if (b.state === 'done') return;
+
+      state.isEngaged = true;
+      wrenchGroup.position.x = b.x;
+      wrenchGroup.position.z = b.z;
+      b.state = 'engaged';
+      updateBoltCard(b);
+      setGuide(`[LOCKED] Clamped on Bolt ${b.id + 1} — HOLD [Space] / [Click] to Break Torque! ([Q] Release)`, 'locked');
+    }
+
+    function releaseWrench() {
+      if (!state.isEngaged) return;
+      if (state.targetId !== null) {
+        const b = bolts[state.targetId];
+        if (b.state === 'engaged') { b.state = 'tight'; updateBoltCard(b); }
+      }
+      state.isEngaged = false;
+      torqueVal.textContent = '0.0';
+      progBar.style.width = '0%';
+      progTxt.textContent = '0%';
+      setNeedle(0);
+      updateProximity();
+    }
+
+    function onBoltFreed(b) {
+      b.state = 'done';
+      b.head.material.color.setHex(0x00e676);
+      b.indMat.opacity = 0;
+      updateBoltCard(b);
+      playSuccess();
+
+      state.isEngaged = false;
+      torqueVal.textContent = '0.0';
+      progBar.style.width = '0%';
+      progTxt.textContent = '0%';
+      setNeedle(0);
+
+      const rem = bolts.filter(x => x.state !== 'done').length;
+      boltCounter.textContent = `${rem} / 6 BOLTS`;
+
+      if (rem === 0) {
+        document.getElementById('complete-banner').classList.add('show');
+      } else {
+        setGuide(`✓ Bolt ${b.id + 1} Successfully Loosened! Move to next bolt.`);
+      }
+      updateProximity();
+    }
+
+    function toggleMode() {
+      state.mode = (state.mode === 'LOOSEN') ? 'TIGHTEN' : 'LOOSEN';
+      telMode.textContent = (state.mode === 'LOOSEN') ? 'LOOSEN (CCW)' : 'TIGHTEN (CW)';
+      telMode.style.color = (state.mode === 'LOOSEN') ? '#00e5ff' : '#ffab00';
+    }
+
+    function setNeedle(val) {
+      const ang = -90 + (val / 150) * 180;
+      const rad = ang * Math.PI / 180;
+      const cx = 85, cy = 85, len = 52;
+      const x2 = cx + len * Math.sin(rad);
+      const y2 = cy - len * Math.cos(rad);
+      const needle = document.getElementById('gauge-needle');
+      if (needle) {
+        needle.setAttribute('x2', x2.toFixed(1));
+        needle.setAttribute('y2', y2.toFixed(1));
+      }
+    }
+
+    // Keyboard controls
+    window.addEventListener('keydown', (e) => {
+      initAudio();
+      const k = e.key.toLowerCase();
+      if (k === 'w' || k === 'arrowup') state.keys.w = true;
+      if (k === 'a' || k === 'arrowleft') state.keys.a = true;
+      if (k === 's' || k === 'arrowdown') state.keys.s = true;
+      if (k === 'd' || k === 'arrowright') state.keys.d = true;
+
+      if (k === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        state.keys.space = true;
+        state.isDriving = true;
+        driveBtn.classList.add('active');
+      }
+      if (k === 'e') clampWrench();
+      if (k === 'q' || k === 'shift' || k === 'escape') releaseWrench();
+      if (k === 'r') toggleMode();
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'w' || k === 'arrowup') state.keys.w = false;
+      if (k === 'a' || k === 'arrowleft') state.keys.a = false;
+      if (k === 's' || k === 'arrowdown') state.keys.s = false;
+      if (k === 'd' || k === 'arrowright') state.keys.d = false;
+
+      if (k === ' ' || e.code === 'Space') {
+        state.keys.space = false;
+        state.isDriving = false;
+        driveBtn.classList.remove('active');
+        if (!state.isEngaged || state.targetId === null) {
+          torqueVal.textContent = '0.0';
+          setNeedle(0);
+        }
+      }
+    });
+
+    // Touch / Virtual Buttons
+    function bindHold(el, onStart, onEnd) {
+      if (!el) return;
+      el.addEventListener('mousedown', (e) => { e.preventDefault(); initAudio(); onStart(); });
+      el.addEventListener('mouseup', (e) => { e.preventDefault(); onEnd(); });
+      el.addEventListener('mouseleave', onEnd);
+      el.addEventListener('touchstart', (e) => { e.preventDefault(); initAudio(); onStart(); }, { passive: false });
+      el.addEventListener('touchend', (e) => { e.preventDefault(); onEnd(); }, { passive: false });
+    }
+
+    bindHold(document.getElementById('d-up'), () => { state.keys.w = true; }, () => { state.keys.w = false; });
+    bindHold(document.getElementById('d-down'), () => { state.keys.s = true; }, () => { state.keys.s = false; });
+    bindHold(document.getElementById('d-left'), () => { state.keys.a = true; }, () => { state.keys.a = false; });
+    bindHold(document.getElementById('d-right'), () => { state.keys.d = true; }, () => { state.keys.d = false; });
+    bindHold(driveBtn, () => { state.isDriving = true; driveBtn.classList.add('active'); }, () => { state.isDriving = false; driveBtn.classList.remove('active'); });
+
+    document.getElementById('d-snap').addEventListener('click', () => {
+      const next = bolts.find(b => b.state !== 'done');
+      if (next) {
+        wrenchGroup.position.x = next.x;
+        wrenchGroup.position.z = next.z;
+        updateProximity();
+      }
+    });
+
+    document.getElementById('btn-clamp').addEventListener('click', clampWrench);
+    document.getElementById('btn-release').addEventListener('click', releaseWrench);
+    document.getElementById('btn-mode').addEventListener('click', toggleMode);
+
+    document.getElementById('cb-replay').addEventListener('click', () => {
+      bolts.forEach(b => {
+        b.state = 'tight';
+        b.lift = 0;
+        b.torque = 0;
+        b.group.position.y = BOLT_INIT_Y;
+        b.group.rotation.y = 0;
+        b.head.material.color.setHex(0xd4af37);
+        b.indMat.opacity = 0;
+        updateBoltCard(b);
+      });
+      boltCounter.textContent = '6 / 6 BOLTS';
+      document.getElementById('complete-banner').classList.remove('show');
+      releaseWrench();
+      updateProximity();
+    });
+
+    document.getElementById('v-persp').addEventListener('click', () => {
+      camera.position.set(0, 5.2, 6.2);
+      controls.target.set(0, 1.1, 0);
+    });
+    document.getElementById('v-top').addEventListener('click', () => {
+      camera.position.set(0, 7.8, 0.05);
+      controls.target.set(0, 1.1, 0);
+    });
+    document.getElementById('v-side').addEventListener('click', () => {
+      camera.position.set(6.2, 3.5, 0);
+      controls.target.set(0, 1.1, 0);
+    });
+    document.getElementById('v-reset').addEventListener('click', () => {
+      document.getElementById('cb-replay').click();
+    });
+
+    // Animation & Kinematics Loop
+    let lastTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      // 1. Horizontal translation when not clamped
+      if (!state.isEngaged) {
+        let mx = 0, mz = 0;
+        if (state.keys.w) mz -= 1;
+        if (state.keys.s) mz += 1;
+        if (state.keys.a) mx -= 1;
+        if (state.keys.d) mx += 1;
+
+        if (mx !== 0 || mz !== 0) {
+          const len = Math.sqrt(mx * mx + mz * mz);
+          wrenchGroup.position.x += (mx / len) * state.speed * dt;
+          wrenchGroup.position.z += (mz / len) * state.speed * dt;
+          wrenchGroup.position.x = Math.max(-3.5, Math.min(3.5, wrenchGroup.position.x));
+          wrenchGroup.position.z = Math.max(-2.0, Math.min(2.0, wrenchGroup.position.z));
+          updateProximity();
+        }
+        wrenchGroup.position.y += (HOVER_Y - wrenchGroup.position.y) * 8.0 * dt;
+      } else {
+        wrenchGroup.position.y += (ENGAGED_Y - wrenchGroup.position.y) * 12.0 * dt;
+      }
+
+      // 2. Driving action
+      if (state.isEngaged && state.isDriving && state.targetId !== null) {
+        const b = bolts[state.targetId];
+        if (b && b.state === 'engaged') {
+          const dir = (state.mode === 'LOOSEN') ? -1 : 1;
+          const dTheta = dir * state.driveSpeed * dt;
+
+          wrenchGroup.rotation.y += dTheta;
+          b.group.rotation.y += dTheta;
+
+          b.torque = Math.min(150, b.torque + state.torquePerSec * dt);
+          b.lift = (b.torque / 150) * BOLT_MAX_LIFT;
+          b.group.position.y = BOLT_INIT_Y + b.lift;
+
+          playRatchet();
+
+          const pct = Math.min(100, Math.round((b.torque / 150) * 100));
+          torqueVal.textContent = b.torque.toFixed(1);
+          setNeedle(b.torque);
+          progBar.style.width = `${pct}%`;
+          progTxt.textContent = `${pct}%`;
+
+          if (b.torque >= 150) {
+            onBoltFreed(b);
+          }
+        }
+      }
+
+      telPos.textContent = `${wrenchGroup.position.x.toFixed(2)}, ${wrenchGroup.position.z.toFixed(2)}`;
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = wrap.clientWidth / wrap.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    });
+
+    updateProximity();
+    animate();
+  })();
+  </script>
+  <script src="nav.js"></script>
+</body>
+</html>

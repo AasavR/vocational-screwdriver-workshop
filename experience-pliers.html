@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Combination Pliers Lab — Vocational XR Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <link rel="stylesheet" href="nav.css">
+  <style>
+    :root {
+      --bg: #080c12;
+      --panel: rgba(12, 18, 26, 0.92);
+      --cyan: #00e5ff;
+      --amber: #ffab00;
+      --green: #00e676;
+      --red: #ff1744;
+      --text: #f0f6fc;
+      --muted: #90a4ae;
+      --font: 'Chakra Petch', sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      overflow: hidden;
+    }
+    #canvas-wrap {
+      position: fixed;
+      inset: 0;
+      top: 50px;
+    }
+    canvas { display: block; width: 100%!important; height: 100%!important; }
+
+    .hud { position: fixed; pointer-events: none; z-index: 200; }
+
+    #guide-bar {
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      border-left: 4px solid var(--cyan);
+      border-radius: 6px;
+      padding: 0.6rem 1.4rem;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+      white-space: nowrap;
+      pointer-events: auto;
+    }
+    #guide-bar.aligned { border-left-color: var(--amber); }
+    #guide-bar.gripped { border-left-color: var(--green); box-shadow: 0 0 20px rgba(0, 230, 118, 0.4); }
+
+    /* Wire Terminal panel */
+    #terminal-panel {
+      top: 60px;
+      left: 20px;
+      width: 250px;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      border-radius: 8px;
+      padding: 0.85rem;
+      pointer-events: auto;
+    }
+    .tp-title {
+      font-size: 0.72rem;
+      letter-spacing: 1.2px;
+      color: var(--cyan);
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+    }
+    .terminal-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .terminal-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0.35rem 0.6rem;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 5px;
+      transition: all 0.2s;
+    }
+    .terminal-row.active { border-color: var(--amber); background: rgba(255, 171, 0, 0.1); }
+    .terminal-row.done { border-color: var(--green); background: rgba(0, 230, 118, 0.1); }
+    .t-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .t-name { font-family: var(--mono); font-size: 0.72rem; font-weight: 700; flex: 1; }
+    .t-status { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); }
+    .terminal-row.done .t-status { color: var(--green); }
+    .terminal-row.active .t-status { color: var(--amber); }
+
+    /* Force Gauge Panel */
+    #force-panel {
+      top: 60px;
+      right: 20px;
+      width: 250px;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      border-radius: 8px;
+      padding: 0.9rem;
+      pointer-events: auto;
+    }
+    .force-bar-wrap {
+      width: 100%;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      margin: 0.5rem 0;
+    }
+    .force-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #00e5ff, #00e676);
+      transition: width 0.08s;
+    }
+    .force-bar.danger {
+      background: linear-gradient(90deg, #ffab00, #ff1744);
+    }
+    .force-txt {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .tel-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      margin-top: 0.45rem;
+    }
+    .tel-l { color: var(--muted); }
+    .tel-v { color: #fff; font-weight: 600; }
+    .mode-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      background: rgba(0, 229, 255, 0.1);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      border-radius: 4px;
+      padding: 0.25rem 0.6rem;
+      margin-top: 0.5rem;
+    }
+    .mode-pill span { color: var(--cyan); font-weight: 700; }
+
+    /* Controls Bar */
+    #ctrl-bar {
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(10, 16, 24, 0.95);
+      backdrop-filter: blur(14px);
+      border-top: 1px solid rgba(0, 229, 255, 0.2);
+      padding: 0.65rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: auto;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .cg-title { font-size: 0.64rem; letter-spacing: 1.2px; color: var(--cyan); font-weight: 700; margin-bottom: 2px; }
+    .dpad { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .dpad-mid { display: flex; gap: 2px; }
+    .dp {
+      width: 32px;
+      height: 30px;
+      background: #1a2533;
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: all 0.1s;
+    }
+    .dp:active { background: var(--cyan); color: #000; }
+    .acts { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .ab {
+      background: #1a2533;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 0.5rem 0.9rem;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.15rem;
+      font-family: var(--font);
+      transition: all 0.15s;
+    }
+    .ab:hover { border-color: var(--cyan); }
+    .ab .kbd { font-family: var(--mono); font-size: 0.62rem; background: rgba(255, 255, 255, 0.1); padding: 0.1rem 0.4rem; border-radius: 3px; color: var(--cyan); }
+    .ab .abt { font-size: 0.72rem; font-weight: 700; }
+    .ab-pull { background: linear-gradient(135deg, rgba(0, 229, 255, 0.2), rgba(255, 64, 129, 0.2)); border-color: var(--cyan); }
+    .ab-pull.active { background: linear-gradient(135deg, #00e5ff, #ff4081); color: #000; box-shadow: 0 0 15px rgba(0, 229, 255, 0.6); }
+    .ab-pull.active .kbd { background: #000; color: #fff; }
+    .views { display: flex; gap: 0.4rem; }
+    .vb {
+      background: #151d26;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      padding: 0.45rem 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .vb:hover { color: #fff; border-color: var(--cyan); }
+
+    /* Completion overlay */
+    #complete-banner {
+      display: none;
+      position: fixed;
+      inset: 0;
+      top: 50px;
+      background: rgba(0, 0, 0, 0.82);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1.2rem;
+      text-align: center;
+    }
+    #complete-banner.show { display: flex; }
+    .cb-emoji { font-size: 4rem; }
+    .cb-title { font-size: 2.2rem; font-weight: 700; color: var(--green); letter-spacing: 1px; }
+    .cb-sub { font-size: 1rem; color: var(--muted); font-family: var(--mono); }
+    .cb-btn {
+      margin-top: 0.5rem;
+      background: var(--green);
+      color: #000;
+      font-family: var(--font);
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 0.75rem 1.8rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .cb-btn:hover { background: #69f0ae; box-shadow: 0 0 20px rgba(0, 230, 118, 0.6); }
+  </style>
+</head>
+<body>
+  <div id="canvas-wrap"></div>
+
+  <!-- HUD -->
+  <div class="hud" id="guide-bar">
+    <span>⚡</span>
+    <span id="guide-txt">[NAVIGATION] Move with [WASD] or [Arrow Keys] over a wire terminal</span>
+  </div>
+
+  <div class="hud" id="terminal-panel">
+    <div class="tp-title">CIRCUIT WIRE TERMINALS</div>
+    <div class="terminal-list" id="terminal-list"></div>
+    <div class="tel-row" style="margin-top:0.75rem">
+      <span class="tel-l">REMAINING:</span>
+      <span class="tel-v" id="terminal-counter">8 / 8 TERMINALS</span>
+    </div>
+  </div>
+
+  <div class="hud" id="force-panel">
+    <div class="tp-title">PLIERS TELEMETRY</div>
+    <div class="tel-row"><span class="tel-l">JAW GRIP FORCE:</span></div>
+    <div class="force-bar-wrap">
+      <div class="force-bar" id="force-bar" style="width: 0%"></div>
+      <div class="force-txt" id="force-txt">0 N</div>
+    </div>
+    <div class="tel-row">
+      <span class="tel-l">CRIMP PROGRESS:</span>
+      <span class="tel-v" id="crimp-pct">0%</span>
+    </div>
+    <div class="tel-row">
+      <span class="tel-l">ENGAGEMENT:</span>
+      <span class="tel-v" id="tel-eng" style="color:var(--muted)">HOVER</span>
+    </div>
+    <div class="tel-row">
+      <span class="tel-l">POSITION:</span>
+      <span class="tel-v" id="tel-pos">0.00, 0.00</span>
+    </div>
+    <div class="mode-pill">MODE: <span id="tel-mode">PULL (DISENGAGE)</span></div>
+  </div>
+
+  <!-- Controls Bar -->
+  <div class="hud" id="ctrl-bar">
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div class="cg-title">PLIERS TRANSLATION</div>
+      <div class="dpad">
+        <button class="dp" id="d-up">▲</button>
+        <div class="dpad-mid">
+          <button class="dp" id="d-left">◀</button>
+          <button class="dp" id="d-snap" title="Snap to nearest wire terminal">◎</button>
+          <button class="dp" id="d-right">▶</button>
+        </div>
+        <button class="dp" id="d-down">▼</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div class="cg-title">PLIERS ACTIONS</div>
+      <div class="acts">
+        <button class="ab" id="btn-grip"><span class="kbd">E</span><span class="abt">GRIP TERMINAL</span></button>
+        <button class="ab ab-pull" id="btn-pull"><span class="kbd">SPACE (HOLD)</span><span class="abt">PULL / CRIMP</span></button>
+        <button class="ab" id="btn-release"><span class="kbd">Q</span><span class="abt">RELEASE GRIP</span></button>
+        <button class="ab" id="btn-mode"><span class="kbd">R</span><span class="abt">TOGGLE MODE</span></button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div class="cg-title">CAMERA VIEWS</div>
+      <div class="views">
+        <button class="vb" id="v-persp">PERSPECTIVE</button>
+        <button class="vb" id="v-top">TOP-DOWN</button>
+        <button class="vb" id="v-side">SIDE</button>
+        <button class="vb" id="v-reset" style="color:#ff8a80;border-color:rgba(255,23,68,0.35)">RESET</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Completion Banner -->
+  <div id="complete-banner">
+    <div class="cb-emoji">🔌</div>
+    <div class="cb-title">CIRCUIT PANEL DISASSEMBLED!</div>
+    <div class="cb-sub">All 8 wire terminals pulled and crimped to specification</div>
+    <button class="cb-btn" id="cb-replay">RESET &amp; REPLAY EXPERIENCE</button>
+    <a href="index.html" style="color:#00e5ff;font-size:0.85rem;font-family:var(--mono);text-decoration:none;margin-top:0.4rem">
+      ← Return to Screwdriver Workshop
+    </a>
+  </div>
+
+  <script>
+  (function() {
+    'use strict';
+
+    // Web Audio Synthesizer
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx && AudioCtx) audioCtx = new AudioCtx();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playSnap() {
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(70, now + 0.05);
+
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.05);
+    }
+
+    function playSuccess() {
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+        gain.gain.setValueAtTime(0.25, now + idx * 0.07);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.28);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + idx * 0.07);
+        osc.stop(now + idx * 0.07 + 0.28);
+      });
+    }
+
+    // Three.js Scene Setup
+    const wrap = document.getElementById('canvas-wrap');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x080c12);
+    scene.fog = new THREE.FogExp2(0x080c12, 0.045);
+
+    const camera = new THREE.PerspectiveCamera(46, wrap.clientWidth / wrap.clientHeight, 0.1, 100);
+    camera.position.set(0, 5.0, 5.8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    wrap.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 1.1, 0);
+    controls.maxPolarAngle = Math.PI / 2 - 0.05;
+    controls.minDistance = 2;
+    controls.maxDistance = 12;
+
+    // Lighting
+    scene.add(new THREE.AmbientLight(0x2a3642, 1.3));
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.6);
+    mainLight.position.set(4, 9, 4);
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.width = mainLight.shadow.mapSize.height = 2048;
+    scene.add(mainLight);
+
+    const rimLight = new THREE.DirectionalLight(0xff4081, 0.45);
+    rimLight.position.set(-5, 4, -4);
+    scene.add(rimLight);
+
+    // Workbench
+    const bench = new THREE.Mesh(
+      new THREE.BoxGeometry(8, 0.3, 5),
+      new THREE.MeshStandardMaterial({ color: 0x151c24, metalness: 0.6, roughness: 0.5 })
+    );
+    bench.position.y = 0.75;
+    bench.receiveShadow = true;
+    scene.add(bench);
+    scene.add(new THREE.GridHelper(7, 14, 0xff4081, 0x1e2633));
+
+    // PCB Board Rack
+    const pcbGroup = new THREE.Group();
+    pcbGroup.position.set(0, 1.0, 0);
+
+    const pcbPlate = new THREE.Mesh(
+      new THREE.BoxGeometry(4.4, 0.12, 2.8),
+      new THREE.MeshStandardMaterial({ color: 0x14331e, metalness: 0.25, roughness: 0.65 })
+    );
+    pcbPlate.castShadow = true;
+    pcbPlate.receiveShadow = true;
+    pcbGroup.add(pcbPlate);
+
+    // Gold circuit traces
+    for (let i = 0; i < 6; i++) {
+      const trace = new THREE.Mesh(
+        new THREE.BoxGeometry(3.6, 0.015, 0.02),
+        new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.15 })
+      );
+      trace.position.set(0, 0.065, -1.0 + i * 0.4);
+      pcbGroup.add(trace);
+    }
+    scene.add(pcbGroup);
+
+    // 8 Wire Terminals in 2 rows of 4
+    const WIRE_DEFS = [
+      { id: 0, name: 'TERM-RED-1',  hex: '#ff1744', col: 0xff1744, x: -1.5, z: -0.65 },
+      { id: 1, name: 'TERM-CYAN-2', hex: '#00e5ff', col: 0x00e5ff, x: -0.5, z: -0.65 },
+      { id: 2, name: 'TERM-AMB-3',  hex: '#ffab00', col: 0xffab00, x:  0.5, z: -0.65 },
+      { id: 3, name: 'TERM-GRN-4',  hex: '#00e676', col: 0x00e676, x:  1.5, z: -0.65 },
+      { id: 4, name: 'TERM-PNK-5',  hex: '#ff4081', col: 0xff4081, x: -1.5, z:  0.65 },
+      { id: 5, name: 'TERM-BLU-6',  hex: '#448aff', col: 0x448aff, x: -0.5, z:  0.65 },
+      { id: 6, name: 'TERM-ORG-7',  hex: '#ff6d00', col: 0xff6d00, x:  0.5, z:  0.65 },
+      { id: 7, name: 'TERM-YEL-8',  hex: '#ffd600', col: 0xffd600, x:  1.5, z:  0.65 }
+    ];
+
+    const terminals = [];
+    const TERM_INIT_Y = 1.15;
+    const TERM_MAX_LIFT = 0.55;
+
+    function buildTerminal(cfg) {
+      const g = new THREE.Group();
+      g.position.set(cfg.x, TERM_INIT_Y, cfg.z);
+
+      // Terminal Block
+      const block = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.16, 0.2),
+        new THREE.MeshStandardMaterial({ color: 0x1f2733, metalness: 0.4, roughness: 0.6 })
+      );
+      block.castShadow = true;
+      g.add(block);
+
+      // Golden Contact Pin
+      const pin = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.04, 0.14, 8),
+        new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.15 })
+      );
+      pin.position.y = 0.12;
+      g.add(pin);
+
+      // Coloured Wire Cable
+      const wire = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8),
+        new THREE.MeshStandardMaterial({ color: cfg.col, roughness: 0.6, metalness: 0.15 })
+      );
+      wire.position.y = -0.28;
+      g.add(wire);
+
+      // Indicator ring
+      const indMat = new THREE.MeshBasicMaterial({ color: cfg.col, side: THREE.DoubleSide, transparent: true, opacity: 0 });
+      const ind = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.26, 32), indMat);
+      ind.rotation.x = -Math.PI / 2;
+      ind.position.y = 0.08;
+      g.add(ind);
+
+      scene.add(g);
+      return { id: cfg.id, name: cfg.name, hex: cfg.hex, group: g, block, indMat, x: cfg.x, z: cfg.z, force: 0, state: 'connected' };
+    }
+
+    WIRE_DEFS.forEach(cfg => terminals.push(buildTerminal(cfg)));
+
+    // Populate HUD terminal list
+    const tList = document.getElementById('terminal-list');
+    terminals.forEach(t => {
+      const row = document.createElement('div');
+      row.className = 'terminal-row';
+      row.id = `tr-${t.id}`;
+      row.innerHTML = `
+        <div class="t-dot" style="background:${t.hex}"></div>
+        <div class="t-name">${t.name}</div>
+        <div class="t-status">CONNECTED</div>
+      `;
+      tList.appendChild(row);
+    });
+
+    // Combination Pliers Tool Model
+    const pliersGroup = new THREE.Group();
+    const HOVER_Y = 2.45;
+    const ENGAGED_Y = 1.6;
+    pliersGroup.position.set(0, HOVER_Y, 0);
+
+    function buildPliers() {
+      const g = new THREE.Group();
+      const metalMat = new THREE.MeshStandardMaterial({ color: 0xd8e0e8, metalness: 0.92, roughness: 0.15 });
+      const redGripMat = new THREE.MeshStandardMaterial({ color: 0xd50000, metalness: 0.1, roughness: 0.8 });
+
+      // Lower Jaw
+      const jaw1 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.07, 0.5), metalMat);
+      jaw1.position.set(0, -0.04, 0.18);
+      jaw1.castShadow = true;
+      g.add(jaw1);
+
+      // Upper Jaw
+      const jaw2 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.07, 0.5), metalMat);
+      jaw2.position.set(0, 0.04, 0.18);
+      jaw2.castShadow = true;
+      g.add(jaw2);
+
+      // Pivot Bolted Hinge
+      const pivot = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.045, 0.22, 16),
+        new THREE.MeshStandardMaterial({ color: 0x455a64, metalness: 0.9, roughness: 0.2 })
+      );
+      pivot.rotation.x = Math.PI / 2;
+      pivot.position.z = 0.0;
+      g.add(pivot);
+
+      // Ergonomic Rubberized Handles
+      const h1 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.95, 8), redGripMat);
+      h1.position.set(0.09, 0.65, -0.15);
+      h1.rotation.z = 0.18;
+      h1.castShadow = true;
+      g.add(h1);
+
+      const h2 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.95, 8), redGripMat);
+      h2.position.set(-0.09, 0.65, -0.15);
+      h2.rotation.z = -0.18;
+      h2.castShadow = true;
+      g.add(h2);
+
+      // Laser Reticle
+      const laser = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.003, 0.003, 1.4, 8),
+        new THREE.MeshBasicMaterial({ color: 0xff4081, transparent: true, opacity: 0.45 })
+      );
+      laser.position.y = -0.8;
+      g.add(laser);
+
+      return g;
+    }
+
+    pliersGroup.add(buildPliers());
+    scene.add(pliersGroup);
+
+    // State & Kinematics
+    const state = {
+      mode: 'PULL',
+      isGripped: false,
+      isDriving: false,
+      targetId: null,
+      speed: 3.4,
+      forceRate: 35.0,
+      keys: { w: false, a: false, s: false, d: false, space: false }
+    };
+
+    // DOM Elements
+    const guideBar = document.getElementById('guide-bar');
+    const guideTxt = document.getElementById('guide-txt');
+    const forceBar = document.getElementById('force-bar');
+    const forceTxt = document.getElementById('force-txt');
+    const crimpPct = document.getElementById('crimp-pct');
+    const telPos = document.getElementById('tel-pos');
+    const telEng = document.getElementById('tel-eng');
+    const telMode = document.getElementById('tel-mode');
+    const terminalCounter = document.getElementById('terminal-counter');
+    const pullBtn = document.getElementById('btn-pull');
+
+    function setGuide(msg, type = 'normal') {
+      guideTxt.textContent = msg;
+      guideBar.className = 'hud';
+      if (type === 'aligned') guideBar.classList.add('aligned');
+      if (type === 'gripped') guideBar.classList.add('gripped');
+    }
+
+    function updateTerminalRow(t) {
+      const row = document.getElementById(`tr-${t.id}`);
+      if (!row) return;
+      const st = row.querySelector('.t-status');
+      if (t.state === 'connected') { row.className = 'terminal-row'; st.textContent = 'CONNECTED'; }
+      else if (t.state === 'gripped') { row.className = 'terminal-row active'; st.textContent = 'GRIPPED'; }
+      else { row.className = 'terminal-row done'; st.textContent = 'REMOVED ✓'; }
+    }
+
+    function updateProximity() {
+      if (state.isGripped) return;
+      let nearest = null;
+      let minDist = 0.65;
+
+      terminals.forEach(t => {
+        if (t.state === 'removed') { t.indMat.opacity = 0; return; }
+        const dx = pliersGroup.position.x - t.x;
+        const dz = pliersGroup.position.z - t.z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d < minDist) { nearest = t; minDist = d; }
+      });
+
+      terminals.forEach(t => {
+        if (t.state !== 'removed') t.indMat.opacity = (nearest && nearest.id === t.id) ? 0.9 : 0;
+      });
+
+      if (nearest) {
+        state.targetId = nearest.id;
+        setGuide(`[ALIGNED] Above ${nearest.name} — Press [E] to Grip Terminal Jaws`, 'aligned');
+      } else {
+        state.targetId = null;
+        const rem = terminals.filter(t => t.state !== 'removed').length;
+        setGuide(`[NAVIGATION] Move with [WASD] or [Arrow Keys] over a terminal (${rem}/8 remaining)`);
+      }
+    }
+
+    function gripTerminal() {
+      if (state.isGripped) return;
+      if (state.targetId === null) {
+        setGuide('[WARNING] Align pliers above a terminal head before gripping!');
+        return;
+      }
+      const t = terminals[state.targetId];
+      if (t.state === 'removed') return;
+
+      state.isGripped = true;
+      pliersGroup.position.x = t.x;
+      pliersGroup.position.z = t.z;
+      t.state = 'gripped';
+      updateTerminalRow(t);
+      setGuide(`[LOCKED] Gripping ${t.name} — HOLD [Space] / [Click] to Pull / Crimp! ([Q] Release)`, 'gripped');
+      telEng.textContent = 'GRIPPED';
+      telEng.style.color = '#00e676';
+    }
+
+    function releaseGrip() {
+      if (!state.isGripped) return;
+      if (state.targetId !== null) {
+        const t = terminals[state.targetId];
+        if (t.state === 'gripped') { t.state = 'connected'; t.force = 0; updateTerminalRow(t); }
+      }
+      state.isGripped = false;
+      forceBar.style.width = '0%';
+      forceTxt.textContent = '0 N';
+      forceBar.className = 'force-bar';
+      crimpPct.textContent = '0%';
+      telEng.textContent = 'HOVER';
+      telEng.style.color = 'var(--muted)';
+      updateProximity();
+    }
+
+    function onTerminalCleared(t) {
+      t.state = 'removed';
+      t.block.material.color.setHex(0x00e676);
+      t.indMat.opacity = 0;
+      updateTerminalRow(t);
+      playSuccess();
+
+      state.isGripped = false;
+      forceBar.style.width = '0%';
+      forceTxt.textContent = '0 N';
+      forceBar.className = 'force-bar';
+      crimpPct.textContent = '0%';
+      telEng.textContent = 'HOVER';
+      telEng.style.color = 'var(--muted)';
+
+      const rem = terminals.filter(x => x.state !== 'done' && x.state !== 'removed').length;
+      terminalCounter.textContent = `${rem} / 8 TERMINALS`;
+
+      if (rem === 0) {
+        document.getElementById('complete-banner').classList.add('show');
+      } else {
+        setGuide(`✓ ${t.name} Successfully Disengaged! Move to next terminal.`);
+      }
+      updateProximity();
+    }
+
+    function toggleMode() {
+      state.mode = (state.mode === 'PULL') ? 'CRIMP' : 'PULL';
+      telMode.textContent = (state.mode === 'PULL') ? 'PULL (DISENGAGE)' : 'CRIMP (TERMINATE)';
+      telMode.style.color = (state.mode === 'PULL') ? '#00e5ff' : '#ff4081';
+    }
+
+    // Keyboard Controls
+    window.addEventListener('keydown', (e) => {
+      initAudio();
+      const k = e.key.toLowerCase();
+      if (k === 'w' || k === 'arrowup') state.keys.w = true;
+      if (k === 'a' || k === 'arrowleft') state.keys.a = true;
+      if (k === 's' || k === 'arrowdown') state.keys.s = true;
+      if (k === 'd' || k === 'arrowright') state.keys.d = true;
+
+      if (k === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        state.keys.space = true;
+        state.isDriving = true;
+        pullBtn.classList.add('active');
+      }
+      if (k === 'e') gripTerminal();
+      if (k === 'q' || k === 'shift' || k === 'escape') releaseGrip();
+      if (k === 'r') toggleMode();
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'w' || k === 'arrowup') state.keys.w = false;
+      if (k === 'a' || k === 'arrowleft') state.keys.a = false;
+      if (k === 's' || k === 'arrowdown') state.keys.s = false;
+      if (k === 'd' || k === 'arrowright') state.keys.d = false;
+
+      if (k === ' ' || e.code === 'Space') {
+        state.keys.space = false;
+        state.isDriving = false;
+        pullBtn.classList.remove('active');
+        if (!state.isGripped) {
+          forceBar.style.width = '0%';
+          forceTxt.textContent = '0 N';
+        }
+      }
+    });
+
+    // Touch / Virtual Buttons
+    function bindHold(el, onStart, onEnd) {
+      if (!el) return;
+      el.addEventListener('mousedown', (e) => { e.preventDefault(); initAudio(); onStart(); });
+      el.addEventListener('mouseup', (e) => { e.preventDefault(); onEnd(); });
+      el.addEventListener('mouseleave', onEnd);
+      el.addEventListener('touchstart', (e) => { e.preventDefault(); initAudio(); onStart(); }, { passive: false });
+      el.addEventListener('touchend', (e) => { e.preventDefault(); onEnd(); }, { passive: false });
+    }
+
+    bindHold(document.getElementById('d-up'), () => { state.keys.w = true; }, () => { state.keys.w = false; });
+    bindHold(document.getElementById('d-down'), () => { state.keys.s = true; }, () => { state.keys.s = false; });
+    bindHold(document.getElementById('d-left'), () => { state.keys.a = true; }, () => { state.keys.a = false; });
+    bindHold(document.getElementById('d-right'), () => { state.keys.d = true; }, () => { state.keys.d = false; });
+    bindHold(pullBtn, () => { state.isDriving = true; pullBtn.classList.add('active'); }, () => { state.isDriving = false; pullBtn.classList.remove('active'); });
+
+    document.getElementById('d-snap').addEventListener('click', () => {
+      const next = terminals.find(t => t.state !== 'removed');
+      if (next) {
+        pliersGroup.position.x = next.x;
+        pliersGroup.position.z = next.z;
+        updateProximity();
+      }
+    });
+
+    document.getElementById('btn-grip').addEventListener('click', gripTerminal);
+    document.getElementById('btn-release').addEventListener('click', releaseGrip);
+    document.getElementById('btn-mode').addEventListener('click', toggleMode);
+
+    document.getElementById('cb-replay').addEventListener('click', () => {
+      terminals.forEach(t => {
+        t.state = 'connected';
+        t.force = 0;
+        t.group.position.y = TERM_INIT_Y;
+        t.block.material.color.setHex(0x1f2733);
+        t.indMat.opacity = 0;
+        updateTerminalRow(t);
+      });
+      terminalCounter.textContent = '8 / 8 TERMINALS';
+      document.getElementById('complete-banner').classList.remove('show');
+      releaseGrip();
+      updateProximity();
+    });
+
+    document.getElementById('v-persp').addEventListener('click', () => {
+      camera.position.set(0, 5.0, 5.8);
+      controls.target.set(0, 1.1, 0);
+    });
+    document.getElementById('v-top').addEventListener('click', () => {
+      camera.position.set(0, 7.8, 0.05);
+      controls.target.set(0, 1.1, 0);
+    });
+    document.getElementById('v-side').addEventListener('click', () => {
+      camera.position.set(6.2, 3.5, 0);
+      controls.target.set(0, 1.1, 0);
+    });
+    document.getElementById('v-reset').addEventListener('click', () => {
+      document.getElementById('cb-replay').click();
+    });
+
+    // Animation Loop
+    let lastTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      // 1. Horizontal movement
+      if (!state.isGripped) {
+        let mx = 0, mz = 0;
+        if (state.keys.w) mz -= 1;
+        if (state.keys.s) mz += 1;
+        if (state.keys.a) mx -= 1;
+        if (state.keys.d) mx += 1;
+
+        if (mx !== 0 || mz !== 0) {
+          const len = Math.sqrt(mx * mx + mz * mz);
+          pliersGroup.position.x += (mx / len) * state.speed * dt;
+          pliersGroup.position.z += (mz / len) * state.speed * dt;
+          pliersGroup.position.x = Math.max(-3.5, Math.min(3.5, pliersGroup.position.x));
+          pliersGroup.position.z = Math.max(-2.0, Math.min(2.0, pliersGroup.position.z));
+          updateProximity();
+        }
+        pliersGroup.position.y += (HOVER_Y - pliersGroup.position.y) * 8.0 * dt;
+      } else {
+        pliersGroup.position.y += (ENGAGED_Y - pliersGroup.position.y) * 12.0 * dt;
+      }
+
+      // 2. Pull / Crimp Action
+      if (state.isGripped && state.isDriving && state.targetId !== null) {
+        const t = terminals[state.targetId];
+        if (t && t.state === 'gripped') {
+          t.force = Math.min(120, t.force + state.forceRate * dt);
+          playSnap();
+
+          const lift = (t.force / 120) * TERM_MAX_LIFT;
+          t.group.position.y = TERM_INIT_Y + lift;
+
+          pliersGroup.rotation.x = Math.sin(now * 0.02) * 0.06;
+
+          const pct = Math.min(100, Math.round((t.force / 120) * 100));
+          forceBar.style.width = `${pct}%`;
+          forceTxt.textContent = `${Math.round(t.force)} N`;
+          forceBar.className = 'force-bar' + (t.force > 85 ? ' danger' : '');
+          crimpPct.textContent = `${pct}%`;
+
+          if (t.force >= 120) {
+            onTerminalCleared(t);
+          }
+        }
+      } else {
+        pliersGroup.rotation.x += (0 - pliersGroup.rotation.x) * 0.2;
+      }
+
+      telPos.textContent = `${pliersGroup.position.x.toFixed(2)}, ${pliersGroup.position.z.toFixed(2)}`;
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = wrap.clientWidth / wrap.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    });
+
+    updateProximity();
+    animate();
+  })();
+  </script>
+  <script src="nav.js"></script>
+</body>
+</html>
